@@ -1,0 +1,86 @@
+package com.xhh.plugin
+
+import com.android.build.api.transform.*
+import com.android.build.gradle.internal.pipeline.TransformManager
+import org.gradle.api.Plugin
+import org.gradle.api.Project
+import org.objectweb.asm.ClassReader
+import org.objectweb.asm.ClassVisitor
+import org.objectweb.asm.ClassWriter
+
+class LogPlugin extends Transform implements Plugin<Project> {
+
+    @Override
+    void apply(Project project) {
+
+        //todo 插件内部编译错误
+        inputs.each { TransformInput input ->
+
+            input.directoryInputs.each { DirectoryInput directoryInput ->
+
+                if (directoryInput.file.isDirectory()) {
+                    directoryInput.file.eachFileRecurse { File file ->
+                        def name = file.name
+                        if (name.endsWith(".class") && !name.startsWith("R\$") &&
+                                "R.class" != name && "BuildConfig.class" != name) {
+
+                            println name + ' is changing...'
+
+                            ClassReader cr = new ClassReader(file.bytes)
+                            ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS)
+                            ClassVisitor cv = new LogClassVisitor(cw)
+
+                            cr.accept(cv, ClassReader.EXPAND_FRAMES)
+
+                            byte[] code = cw.toByteArray()
+
+                            FileOutputStream fos = new FileOutputStream(
+                                    file.parentFile.absolutePath + File.separator + name)
+                            fos.write(code)
+                            fos.close()
+                        }
+                    }
+                }
+
+                def dest = outputProvider.getContentLocation(directoryInput.name,
+                        directoryInput.contentTypes, directoryInput.scopes,
+                        Format.DIRECTORY)
+
+                FileUtils.copyDirectory(directoryInput.file, dest)
+            }
+
+            input.jarInputs.each { JarInput jarInput ->
+                def jarName = jarInput.name
+                def md5Name = DigestUtils.md5Hex(jarInput.file.getAbsolutePath())
+                if (jarName.endsWith(".jar")) {
+                    jarName = jarName.substring(0, jarName.length() - 4)
+                }
+
+                def dest = outputProvider.getContentLocation(jarName + md5Name,
+                        jarInput.contentTypes, jarInput.scopes, Format.JAR)
+
+                FileUtils.copyFile(jarInput.file, dest)
+            }
+        }
+    }
+
+    @Override
+    String getName() {
+        return "xhh"
+    }
+
+    @Override
+    Set<QualifiedContent.ContentType> getInputTypes() {
+        return TransformManager.CONTENT_CLASS
+    }
+
+    @Override
+    Set<? super QualifiedContent.Scope> getScopes() {
+        return TransformManager.SCOPE_FULL_PROJECT
+    }
+
+    @Override
+    boolean isIncremental() {
+        return false
+    }
+}
