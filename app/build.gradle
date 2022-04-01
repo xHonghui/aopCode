@@ -4,6 +4,8 @@ plugins {
     id 'log-plugin'
 }
 
+
+
 android {
     compileSdkVersion 31
     buildToolsVersion "30.0.2"
